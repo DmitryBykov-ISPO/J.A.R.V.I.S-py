@@ -180,8 +180,7 @@ def filter_cmd(raw_voice: str):
 def recognize_cmd(cmd: str):
     rc = {'cmd': '', 'percent': 0}
     for c, v in VA_CMD_LIST.items():
-
-        for x in v:
+        for x in v['phrases']:
             vrt = fuzz.ratio(cmd, x)
             if vrt > rc['percent']:
                 rc['cmd'] = c
@@ -190,90 +189,59 @@ def recognize_cmd(cmd: str):
     return rc
 
 
+def _set_mute(state: int):
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
+    volume.SetMute(state, None)
+
+
+def _shutdown():
+    try:
+        recorder.stop()
+        recorder.delete()
+    finally:
+        sys.exit(0)
+
+
+def run_action(action):
+    t = action['type']
+    if t == 'exe':
+        path = f"{CDIR}\\custom-commands\\{action['file']}"
+        if action.get('wait'):
+            subprocess.check_call([path])
+        else:
+            subprocess.Popen([path])
+        if 'delay_ms' in action:
+            time.sleep(action['delay_ms'] / 1000)
+    elif t == 'play_sound':
+        play(action['name'])
+    elif t == 'system':
+        op = action['op']
+        if op == 'volume_mute':
+            _set_mute(1)
+        elif op == 'volume_unmute':
+            _set_mute(0)
+        elif op == 'exit':
+            _shutdown()
+    elif t == 'sleep':
+        time.sleep(action['ms'] / 1000)
+    elif t == 'multi':
+        for step in action['steps']:
+            run_action(step)
+
+
 def execute_cmd(cmd: str, voice: str):
-    if cmd == 'open_browser':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run browser.exe'])
-        play("ok")
-
-    elif cmd == 'open_youtube':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run youtube.exe'])
-        play("ok")
-
-    elif cmd == 'open_google':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run google.exe'])
-        play("ok")
-
-    elif cmd == 'music':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run music.exe'])
-        play("ok")
-
-    elif cmd == 'music_off':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Stop music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_save':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Save music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_next':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Next music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_prev':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Prev music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'sound_off':
-        play("ok", True)
-
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        volume.SetMute(1, None)
-
-    elif cmd == 'sound_on':
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        volume.SetMute(0, None)
-
-        play("ok")
-
-    elif cmd == 'thanks':
-        play("thanks")
-
-    elif cmd == 'stupid':
-        play("stupid")
-
-    elif cmd == 'gaming_mode_on':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to gaming mode.exe'])
-        play("ready")
-
-    elif cmd == 'gaming_mode_off':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch back to workspace.exe'])
-        play("ready")
-
-    elif cmd == 'switch_to_headphones':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to headphones.exe'])
-        time.sleep(0.5)
-        play("ready")
-
-    elif cmd == 'switch_to_dynamics':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to dynamics.exe'])
-        time.sleep(0.5)
-        play("ready")
-
-    elif cmd == 'off':
-        play("off", True)
-        exit(0)
+    spec = VA_CMD_LIST.get(cmd)
+    if not spec:
+        return
+    action = spec['action']
+    run_action(action)
+    confirm = spec.get('confirm_sound')
+    if confirm is None and action['type'] == 'exe':
+        confirm = 'ok'
+    if confirm:
+        play(confirm)
 
 
 recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=512)
