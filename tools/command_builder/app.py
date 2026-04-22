@@ -123,7 +123,21 @@ class Bridge:
             return {"ok": False, "error": f"LLM недоступен: {ex}"}
 
 
+def _check_yaml_health():
+    if not COMMANDS_YAML.exists():
+        return
+    try:
+        yaml_writer.load_yaml(COMMANDS_YAML)
+    except Exception as ex:
+        bak = COMMANDS_YAML.with_suffix(COMMANDS_YAML.suffix + ".bak")
+        msg = f"[command_builder] Не удалось разобрать {COMMANDS_YAML.name}: {ex}"
+        if bak.exists():
+            msg += f"\n[command_builder] Резервная копия доступна: {bak} — можно восстановить вручную."
+        print(msg, file=sys.stderr)
+
+
 def main():
+    _check_yaml_health()
     bridge = Bridge()
     index_path = WEB_DIR / "index.html"
     if not index_path.exists():

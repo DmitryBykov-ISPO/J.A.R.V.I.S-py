@@ -729,6 +729,17 @@
         document.addEventListener("keydown", (ev) => {
             if (ev.key === "Escape") {
                 if (state.step > 1) setStep(state.step - 1);
+                return;
+            }
+            if (ev.key === "Enter" && !ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
+                const tag = (ev.target && ev.target.tagName) || "";
+                if (tag === "TEXTAREA") return;
+                if (tag === "BUTTON") return;
+                if (state.step < 4) {
+                    if (state.step === 2 && state.actionType) renderActionForm();
+                    setStep(state.step + 1);
+                    ev.preventDefault();
+                }
             }
         });
     }
