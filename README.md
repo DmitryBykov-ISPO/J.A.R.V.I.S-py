@@ -94,6 +94,27 @@ sound_off:
       - {type: system, op: volume_mute}
 ```
 
+## Конструктор команд
+
+GUI для добавления команд в `commands.yaml` без ручной правки YAML.
+
+Запуск:
+
+```
+python -m tools.command_builder
+```
+
+Или из корня репо `run_builder.bat` (под Windows). Открывается окно pywebview с пошаговым мастером: фразы → тип действия → параметры → предпросмотр YAML и сохранение. На шаге «Действие» доступна вкладка «Подсказать (LLM)» — модель Groq предложит готовый блок по описанию на русском.
+
+После сохранения команды Jarvis нужно перезапустить, чтобы она подхватилась.
+
+Требования:
+
+- Windows 10/11 с установленным WebView2 Runtime (обычно уже стоит вместе с Edge — иначе [скачать у Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/)).
+- Зависимости из `requirements.txt` (включая `pywebview`, `ruamel.yaml`, `pyautogui`).
+
+Подробности для разработчиков — [tools/command_builder/README.md](tools/command_builder/README.md). TODO: добавить скриншот окна.
+
 ## Лицензия
 
 CC BY-NC-SA 4.0 — см. [LICENSE.txt](LICENSE.txt). Авторство оригинала — Abraham Tugalov / Priler. Изменения в этом форке — Bossiara13 (Dmitry Bykov), 2026.
