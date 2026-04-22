@@ -283,7 +283,7 @@ recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=porcupi
 recorder.start()
 print('Using device: %s' % recorder.selected_device)
 
-print(f"Jarvis (v3.0) начал свою работу ...")
+print(f"Jarvis (v0.1.0) начал свою работу ...")
 play("run")
 time.sleep(0.5)
 
