@@ -1,5 +1,4 @@
-# Picovoice stuff
-pvporcupine
+# mic capture
 pvrecorder
 
 # Vosk
