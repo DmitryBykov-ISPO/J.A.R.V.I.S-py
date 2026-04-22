@@ -6,7 +6,7 @@ load_dotenv("dev.env")
 
 # Конфигурация
 VA_NAME = 'Jarvis'
-VA_VER = "3.0"
+VA_VER = "0.1.0"
 VA_ALIAS = ('джарвис',)
 VA_TBR = ('скажи', 'покажи', 'ответь', 'произнеси', 'расскажи', 'сколько', 'слушай')
 
@@ -20,5 +20,7 @@ CHROME_PATH = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
 # Токен Picovoice
 PICOVOICE_TOKEN = os.getenv('PICOVOICE_TOKEN')
 
-# Токен OpenAI
-OPENAI_TOKEN = os.getenv('OPENAI_TOKEN')
+# Токен Groq
+GROQ_TOKEN = os.getenv('GROQ_TOKEN')
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "llama-3.3-70b-versatile"

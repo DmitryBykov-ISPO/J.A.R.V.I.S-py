@@ -1,30 +1,57 @@
-# Kesha v3.0 very early (aka Jarvis update)
-Simple Voice Assistant made as an experiment using [Silero](https://github.com/snakers4/silero-models) & [Vosk](https://pypi.org/project/vosk/).
-<br>Later on [Picovoice Porcupine Wake Word Detection](https://picovoice.ai/platform/porcupine/) & [ChatGPT](https://chat.openai.com/) was added.
+# J.A.R.V.I.S (Python) — Bossiara13's fork
 
-![image](https://i.pinimg.com/originals/63/e9/b7/63e9b72b983793f64bffc07fd14a0e62.jpg)
+Голосовой ассистент для Windows с wake-word **«jarvis»**. Распознаёт речь локально через Vosk (русская модель), отвечает голосом через Silero TTS, а свободные вопросы (фразы, начинающиеся со слова «скажи …») отправляет в LLM на Groq и зачитывает ответ.
 
-`The code has NOT been polished and is provided "as is". There are a lot of code that are redundant and there are tons of improvements that can be made.`
+## Это форк
 
-# Installation
-First, install the requirements, the `requirements.txt` file is just an output of `pip freeze` from my test venv 'k.<br>
-Second, check `config.py` and set required values (api key, device index).<br>
-Next, run the `main.py` script and Voilà, as simple as that.<br><br>
+Форк репозитория [Priler/jarvis](https://github.com/Priler/jarvis) (автор оригинала — Abraham Tugalov, 2022). Лицензия наследуется: **CC BY-NC-SA 4.0** (см. [LICENSE.txt](LICENSE.txt)).
 
-And don't forget to put models of Vosk to main folder.<br>
-You can get the latest from the [official website.](https://alphacephei.com/vosk/models)
-<br>The one I was using is `small`.
-<br>p.s. If you don't understand how to install or where to put the Vosk model, I've made a [screenshot](https://i.imgur.com/N3bu2lC.png) for you.
+## Что отличается от оригинала
 
-# Python version
-I was using Python `3.8.3`, but it should work on any newer version.
+- Из истории удалены случайно закоммиченные секреты.
+- Бэкенд LLM переключён с OpenAI на Groq (бесплатный тариф) через openai-совместимый API.
+- Код обновлён под новую версию SDK `openai` (>=1.0); старый pre-1.0 интерфейс был сломан.
+- Обновлена ветка/тэги (`dev`, `v0.0.1-import`), причёсан README и `requirements.txt`.
 
-# ToDo
-- Адекватная архитектура кода, собрать всё и переписать from the ground up. 
-- Задержка воспроизведения звука на основе реальной длительности .wav файла (прогружать при запуске?)
-- Speech to intent? 
-- Отключать self listening protection во время воспроизведения с наушников. 
-- Указание из списка или по имени будет реализовано позже.
+## Установка
 
-# Author
-(2022) Abraham Tugalov
+Требуется **Python 3.11** (на 3.13 ряд зависимостей пока ставится с бубном).
+
+```bash
+git clone https://github.com/DmitryBykov-ISPO/J.A.R.V.I.S-py.git
+cd J.A.R.V.I.S-py
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Скопируйте `dev.env` и заполните ключи:
+
+- `PICOVOICE_TOKEN` — бесплатно на [console.picovoice.ai](https://console.picovoice.ai/).
+- `GROQ_TOKEN` — бесплатно на [console.groq.com](https://console.groq.com/).
+
+Vosk-модель для русского языка лежит в `model_small/` (уже в репозитории). Запуск:
+
+```bash
+python main.py
+```
+
+## Конфигурация
+
+- `config.py`:
+  - `MICROPHONE_INDEX = -1` — индекс микрофона (`-1` означает устройство по умолчанию). Если микрофонов несколько и берётся не тот, поменяйте число.
+  - `GROQ_MODEL` — имя модели Groq (по умолчанию `llama-3.3-70b-versatile`).
+- `commands.yaml` — набор голосовых команд и их вариантов для fuzzy-матчинга.
+- `custom-commands/` — скомпилированные AHK-скрипты под конкретный сетап автора оригинала (переключение мониторов, управление Яндекс.Музыкой и т.п.). На вашей машине большая часть из них работать не будет, но ассистент запустится в любом случае.
+
+## Использование
+
+1. Скажите **«Джарвис»** (или **«jarvis»**) — ассистент даст звуковой сигнал готовности.
+2. В течение 10 секунд произнесите команду:
+   - либо одну из фраз из `commands.yaml` (открыть браузер, выключить звук и т.д.);
+   - либо начните со слова **«скажи …»** — остаток фразы уйдёт в Groq, ответ будет зачитан вслух.
+
+## Лицензия
+
+CC BY-NC-SA 4.0 — см. [LICENSE.txt](LICENSE.txt). Авторство оригинала — Abraham Tugalov / Priler. Изменения в этом форке — Bossiara13 (Dmitry Bykov), 2026.
