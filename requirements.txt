@@ -26,3 +26,8 @@ pycaw
 sounddevice
 PyYAML
 python-dotenv
+
+# GUI command constructor (tools/command_builder)
+ruamel.yaml
+pywebview
+pyautogui
