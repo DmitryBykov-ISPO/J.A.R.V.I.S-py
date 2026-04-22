@@ -13,6 +13,7 @@ import openai
 from openai import OpenAI
 import simpleaudio as sa
 import vosk
+import webrtcvad
 import yaml
 from comtypes import CLSCTX_ALL
 from fuzzywuzzy import fuzz
@@ -53,6 +54,10 @@ wake_grammar = json.dumps(list(config.WAKE_WORDS) + ["[unk]"], ensure_ascii=Fals
 wake_rec = vosk.KaldiRecognizer(model, samplerate, wake_grammar)
 kaldi_rec = vosk.KaldiRecognizer(model, samplerate)
 q = queue.Queue()
+
+VAD_FRAME_MS = 30
+VAD_FRAME_BYTES = int(samplerate * VAD_FRAME_MS / 1000) * 2
+vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
 
 
 def gpt_answer():
@@ -175,8 +180,7 @@ def filter_cmd(raw_voice: str):
 def recognize_cmd(cmd: str):
     rc = {'cmd': '', 'percent': 0}
     for c, v in VA_CMD_LIST.items():
-
-        for x in v:
+        for x in v['phrases']:
             vrt = fuzz.ratio(cmd, x)
             if vrt > rc['percent']:
                 rc['cmd'] = c
@@ -185,90 +189,59 @@ def recognize_cmd(cmd: str):
     return rc
 
 
+def _set_mute(state: int):
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
+    volume.SetMute(state, None)
+
+
+def _shutdown():
+    try:
+        recorder.stop()
+        recorder.delete()
+    finally:
+        sys.exit(0)
+
+
+def run_action(action):
+    t = action['type']
+    if t == 'exe':
+        path = f"{CDIR}\\custom-commands\\{action['file']}"
+        if action.get('wait'):
+            subprocess.check_call([path])
+        else:
+            subprocess.Popen([path])
+        if 'delay_ms' in action:
+            time.sleep(action['delay_ms'] / 1000)
+    elif t == 'play_sound':
+        play(action['name'])
+    elif t == 'system':
+        op = action['op']
+        if op == 'volume_mute':
+            _set_mute(1)
+        elif op == 'volume_unmute':
+            _set_mute(0)
+        elif op == 'exit':
+            _shutdown()
+    elif t == 'sleep':
+        time.sleep(action['ms'] / 1000)
+    elif t == 'multi':
+        for step in action['steps']:
+            run_action(step)
+
+
 def execute_cmd(cmd: str, voice: str):
-    if cmd == 'open_browser':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run browser.exe'])
-        play("ok")
-
-    elif cmd == 'open_youtube':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run youtube.exe'])
-        play("ok")
-
-    elif cmd == 'open_google':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run google.exe'])
-        play("ok")
-
-    elif cmd == 'music':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Run music.exe'])
-        play("ok")
-
-    elif cmd == 'music_off':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Stop music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_save':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Save music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_next':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Next music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'music_prev':
-        subprocess.Popen([f'{CDIR}\\custom-commands\\Prev music.exe'])
-        time.sleep(0.2)
-        play("ok")
-
-    elif cmd == 'sound_off':
-        play("ok", True)
-
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        volume.SetMute(1, None)
-
-    elif cmd == 'sound_on':
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        volume.SetMute(0, None)
-
-        play("ok")
-
-    elif cmd == 'thanks':
-        play("thanks")
-
-    elif cmd == 'stupid':
-        play("stupid")
-
-    elif cmd == 'gaming_mode_on':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to gaming mode.exe'])
-        play("ready")
-
-    elif cmd == 'gaming_mode_off':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch back to workspace.exe'])
-        play("ready")
-
-    elif cmd == 'switch_to_headphones':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to headphones.exe'])
-        time.sleep(0.5)
-        play("ready")
-
-    elif cmd == 'switch_to_dynamics':
-        play("ok")
-        subprocess.check_call([f'{CDIR}\\custom-commands\\Switch to dynamics.exe'])
-        time.sleep(0.5)
-        play("ready")
-
-    elif cmd == 'off':
-        play("off", True)
-        exit(0)
+    spec = VA_CMD_LIST.get(cmd)
+    if not spec:
+        return
+    action = spec['action']
+    run_action(action)
+    confirm = spec.get('confirm_sound')
+    if confirm is None and action['type'] == 'exe':
+        confirm = 'ok'
+    if confirm:
+        play(confirm)
 
 
 recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=512)
@@ -301,19 +274,42 @@ while True:
 
         play("greet", True)
         print("Yes, sir.")
-        # reset the command recognizer so stale audio doesn't bleed into it
         kaldi_rec.Reset()
-        ltc = time.time()
+        listen_started = time.time()
+        speech_ms = 0
+        silence_ms = 0
+        vad_buf = b""
+        finalize = False
 
-        while time.time() - ltc <= 10:
+        while True:
+            elapsed_ms = (time.time() - listen_started) * 1000
+            if elapsed_ms >= config.COMMAND_MAX_LISTEN_MS:
+                break
+
             pcm = recorder.read()
             sp = struct.pack("h" * len(pcm), *pcm)
+            kaldi_rec.AcceptWaveform(sp)
 
-            if kaldi_rec.AcceptWaveform(sp):
-                if va_respond(json.loads(kaldi_rec.Result())["text"]):
-                    ltc = time.time()
+            vad_buf += sp
+            while len(vad_buf) >= VAD_FRAME_BYTES:
+                frame = vad_buf[:VAD_FRAME_BYTES]
+                vad_buf = vad_buf[VAD_FRAME_BYTES:]
+                if vad.is_speech(frame, samplerate):
+                    speech_ms += VAD_FRAME_MS
+                    silence_ms = 0
+                else:
+                    silence_ms += VAD_FRAME_MS
 
+            if elapsed_ms < config.COMMAND_MIN_LISTEN_MS:
+                continue
+            if speech_ms >= config.COMMAND_MIN_SPEECH_MS and silence_ms >= config.COMMAND_END_SILENCE_MS:
+                finalize = True
                 break
+
+        if finalize or speech_ms > 0:
+            text = json.loads(kaldi_rec.FinalResult()).get("text", "")
+            if text:
+                va_respond(text)
 
         wake_rec.Reset()
 

@@ -26,3 +26,11 @@ CHROME_PATH = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
 GROQ_TOKEN = os.getenv('GROQ_TOKEN')
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_MODEL = "llama-3.3-70b-versatile"
+
+# VAD (webrtcvad) — определяет конец команды по тишине вместо фиксированных 10 сек.
+# 0..3, выше — агрессивнее режет шум (но и обрезает речь).
+VAD_AGGRESSIVENESS = 2
+COMMAND_END_SILENCE_MS = 1200
+COMMAND_MIN_SPEECH_MS = 500
+COMMAND_MIN_LISTEN_MS = 1000
+COMMAND_MAX_LISTEN_MS = 15000
