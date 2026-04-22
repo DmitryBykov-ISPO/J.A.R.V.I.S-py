@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>J.A.R.V.I.S — конструктор команд</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+    <header class="topbar">
+        <h1>Конструктор команд</h1>
+        <div class="steps">
+            <button class="step" data-step="1" type="button"><span>1</span> Фразы</button>
+            <button class="step" data-step="2" type="button"><span>2</span> Действие</button>
+            <button class="step" data-step="3" type="button"><span>3</span> Параметры</button>
+            <button class="step" data-step="4" type="button"><span>4</span> Сохранить</button>
+        </div>
+    </header>
+
+    <main class="main">
+        <section class="panel" data-panel="1">
+            <h2>Голосовые фразы</h2>
+            <p class="hint">Минимум одна фраза. Идентификатор подставится автоматически из первой фразы.</p>
+            <div class="field">
+                <label for="phrase-0">Основная фраза</label>
+                <input type="text" id="phrase-0" data-phrase-input placeholder="например, открой документацию">
+            </div>
+            <div id="extra-phrases"></div>
+            <button type="button" class="ghost" id="add-phrase">+ синоним</button>
+            <div class="field">
+                <label for="cmd-id">Идентификатор команды</label>
+                <input type="text" id="cmd-id" placeholder="auto">
+                <div class="row-hint" id="cmd-id-hint"></div>
+            </div>
+            <div class="actions">
+                <button type="button" class="primary" data-go="2">Далее</button>
+            </div>
+        </section>
+
+        <section class="panel" data-panel="2" hidden>
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="manual">Вручную</button>
+                <button type="button" class="tab" data-tab="llm">Подсказать (LLM)</button>
+            </div>
+
+            <div class="tab-content" data-tab-content="manual">
+                <h2>Тип действия</h2>
+                <div class="grid" id="action-grid">
+                    <button type="button" class="card" data-action="exe"><span class="card-title">Выполнить .exe</span><span class="card-sub">из custom-commands/</span></button>
+                    <button type="button" class="card" data-action="url"><span class="card-title">Открыть сайт</span><span class="card-sub">через системный браузер</span></button>
+                    <button type="button" class="card" data-action="keys"><span class="card-title">Нажать клавиши</span><span class="card-sub">или напечатать текст</span></button>
+                    <button type="button" class="card" data-action="play_sound"><span class="card-title">Воспроизвести звук</span><span class="card-sub">из набора Jarvis</span></button>
+                    <button type="button" class="card" data-action="system"><span class="card-title">Системное действие</span><span class="card-sub">звук, выход</span></button>
+                    <button type="button" class="card" data-action="shell"><span class="card-title">PowerShell</span><span class="card-sub">любая shell-команда</span></button>
+                    <button type="button" class="card" data-action="sleep"><span class="card-title">Пауза</span><span class="card-sub">только в составе</span></button>
+                    <button type="button" class="card" data-action="multi"><span class="card-title">Последовательность</span><span class="card-sub">несколько шагов</span></button>
+                </div>
+                <div class="actions">
+                    <button type="button" class="ghost" data-go="1">Назад</button>
+                    <button type="button" class="primary" data-go="3" id="to-step-3">Далее</button>
+                </div>
+            </div>
+
+            <div class="tab-content" data-tab-content="llm" hidden>
+                <h2>Опишите команду на русском</h2>
+                <p class="hint">Модель предложит набор шагов. Их можно отредактировать перед сохранением.</p>
+                <textarea id="llm-prompt" rows="4" placeholder="например, открой ютуб и приглуши звук"></textarea>
+                <div class="actions">
+                    <button type="button" class="primary" id="llm-generate">Сгенерировать</button>
+                </div>
+                <div id="llm-status" class="row-hint"></div>
+                <div id="llm-suggestions"></div>
+            </div>
+        </section>
+
+        <section class="panel" data-panel="3" hidden>
+            <h2>Параметры действия</h2>
+            <div id="params-form"></div>
+            <div class="actions">
+                <button type="button" class="ghost" data-go="2">Назад</button>
+                <button type="button" class="primary" data-go="4">Далее</button>
+            </div>
+        </section>
+
+        <section class="panel" data-panel="4" hidden>
+            <h2>Предпросмотр и сохранение</h2>
+            <div class="field">
+                <label>YAML</label>
+                <pre id="yaml-preview"></pre>
+            </div>
+            <div id="save-status" class="row-hint"></div>
+            <div class="actions">
+                <button type="button" class="ghost" data-go="3">Назад</button>
+                <button type="button" class="primary" id="save-btn">Сохранить</button>
+                <button type="button" class="ghost" id="cancel-btn">Сброс</button>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+</div>
+
+<script src="vendor/js-yaml.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
