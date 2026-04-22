@@ -20,5 +20,7 @@ CHROME_PATH = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
 # Токен Picovoice
 PICOVOICE_TOKEN = os.getenv('PICOVOICE_TOKEN')
 
-# Токен OpenAI
-OPENAI_TOKEN = os.getenv('OPENAI_TOKEN')
+# Токен Groq
+GROQ_TOKEN = os.getenv('GROQ_TOKEN')
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "llama-3.3-70b-versatile"
