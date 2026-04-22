@@ -186,3 +186,8 @@ fabric.properties
 
 # idea folder, uncomment if you don't need it
 # .idea
+# Local secrets (real keys go here, not in dev.env.example)
+dev.env
+
+# Misc artifacts
+.git-filter-redactions.txt
