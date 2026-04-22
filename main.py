@@ -11,7 +11,6 @@ from ctypes import POINTER, cast
 
 import openai
 from openai import OpenAI
-import pvporcupine
 import simpleaudio as sa
 import vosk
 import yaml
@@ -39,18 +38,14 @@ message_log = [system_message]
 
 client = OpenAI(api_key=config.GROQ_TOKEN, base_url=config.GROQ_BASE_URL)
 
-# PORCUPINE
-porcupine = pvporcupine.create(
-    access_key=config.PICOVOICE_TOKEN,
-    keywords=['jarvis'],
-    sensitivities=[1]
-)
-# print(pvporcupine.KEYWORDS)
-
-# VOSK
 model = vosk.Model("model_small")
 samplerate = 16000
 device = config.MICROPHONE_INDEX
+
+# wake-word phase uses a grammar-constrained recognizer so only WAKE_WORDS
+# (plus [unk] filler) can match — command phase needs full vocab, hence two.
+wake_grammar = json.dumps(list(config.WAKE_WORDS) + ["[unk]"], ensure_ascii=False)
+wake_rec = vosk.KaldiRecognizer(model, samplerate, wake_grammar)
 kaldi_rec = vosk.KaldiRecognizer(model, samplerate)
 q = queue.Queue()
 
@@ -268,33 +263,42 @@ def execute_cmd(cmd: str, voice: str):
 
     elif cmd == 'off':
         play("off", True)
-
-        porcupine.delete()
         exit(0)
 
 
-# `-1` is the default input audio device.
-recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=porcupine.frame_length)
+recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=512)
 recorder.start()
 print('Using device: %s' % recorder.selected_device)
 
-print(f"Jarvis (v0.1.0) начал свою работу ...")
+print(f"Jarvis (v{config.VA_VER}) начал свою работу ...")
 play("run")
 time.sleep(0.5)
 
-ltc = time.time() - 1000
+
+def heard_wake_word(text: str) -> bool:
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(w in lowered for w in config.WAKE_WORDS)
+
 
 while True:
     try:
         pcm = recorder.read()
-        keyword_index = porcupine.process(pcm)
+        sp = struct.pack("h" * len(pcm), *pcm)
 
-        if keyword_index >= 0:
-            recorder.stop()
-            play("greet", True)
-            print("Yes, sir.")
-            recorder.start()  # prevent self recording
-            ltc = time.time()
+        if not wake_rec.AcceptWaveform(sp):
+            continue
+
+        result_text = json.loads(wake_rec.Result()).get("text", "")
+        if not heard_wake_word(result_text):
+            continue
+
+        play("greet", True)
+        print("Yes, sir.")
+        # reset the command recognizer so stale audio doesn't bleed into it
+        kaldi_rec.Reset()
+        ltc = time.time()
 
         while time.time() - ltc <= 10:
             pcm = recorder.read()
@@ -305,6 +309,8 @@ while True:
                     ltc = time.time()
 
                 break
+
+        wake_rec.Reset()
 
     except Exception as err:
         print(f"Unexpected {err=}, {type(err)=}")
