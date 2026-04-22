@@ -7,6 +7,7 @@ import struct
 import subprocess
 import sys
 import time
+import webbrowser
 from ctypes import POINTER, cast
 
 import openai
@@ -226,6 +227,20 @@ def run_action(action):
             _shutdown()
     elif t == 'sleep':
         time.sleep(action['ms'] / 1000)
+    elif t == 'shell':
+        if action.get('wait'):
+            subprocess.check_call(action['cmd'], shell=True)
+        else:
+            subprocess.Popen(action['cmd'], shell=True)
+    elif t == 'url':
+        webbrowser.open(action['href'])
+    elif t == 'keys':
+        import pyautogui
+        if action.get('sequence'):
+            keys = [k.strip() for k in action['sequence'].split('+') if k.strip()]
+            pyautogui.hotkey(*keys)
+        elif action.get('text'):
+            pyautogui.typewrite(action['text'], interval=0.02)
     elif t == 'multi':
         for step in action['steps']:
             run_action(step)
