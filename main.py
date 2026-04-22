@@ -13,6 +13,7 @@ import openai
 from openai import OpenAI
 import simpleaudio as sa
 import vosk
+import webrtcvad
 import yaml
 from comtypes import CLSCTX_ALL
 from fuzzywuzzy import fuzz
@@ -53,6 +54,10 @@ wake_grammar = json.dumps(list(config.WAKE_WORDS) + ["[unk]"], ensure_ascii=Fals
 wake_rec = vosk.KaldiRecognizer(model, samplerate, wake_grammar)
 kaldi_rec = vosk.KaldiRecognizer(model, samplerate)
 q = queue.Queue()
+
+VAD_FRAME_MS = 30
+VAD_FRAME_BYTES = int(samplerate * VAD_FRAME_MS / 1000) * 2
+vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
 
 
 def gpt_answer():
@@ -301,19 +306,42 @@ while True:
 
         play("greet", True)
         print("Yes, sir.")
-        # reset the command recognizer so stale audio doesn't bleed into it
         kaldi_rec.Reset()
-        ltc = time.time()
+        listen_started = time.time()
+        speech_ms = 0
+        silence_ms = 0
+        vad_buf = b""
+        finalize = False
 
-        while time.time() - ltc <= 10:
+        while True:
+            elapsed_ms = (time.time() - listen_started) * 1000
+            if elapsed_ms >= config.COMMAND_MAX_LISTEN_MS:
+                break
+
             pcm = recorder.read()
             sp = struct.pack("h" * len(pcm), *pcm)
+            kaldi_rec.AcceptWaveform(sp)
 
-            if kaldi_rec.AcceptWaveform(sp):
-                if va_respond(json.loads(kaldi_rec.Result())["text"]):
-                    ltc = time.time()
+            vad_buf += sp
+            while len(vad_buf) >= VAD_FRAME_BYTES:
+                frame = vad_buf[:VAD_FRAME_BYTES]
+                vad_buf = vad_buf[VAD_FRAME_BYTES:]
+                if vad.is_speech(frame, samplerate):
+                    speech_ms += VAD_FRAME_MS
+                    silence_ms = 0
+                else:
+                    silence_ms += VAD_FRAME_MS
 
+            if elapsed_ms < config.COMMAND_MIN_LISTEN_MS:
+                continue
+            if speech_ms >= config.COMMAND_MIN_SPEECH_MS and silence_ms >= config.COMMAND_END_SILENCE_MS:
+                finalize = True
                 break
+
+        if finalize or speech_ms > 0:
+            text = json.loads(kaldi_rec.FinalResult()).get("text", "")
+            if text:
+                va_respond(text)
 
         wake_rec.Reset()
 

@@ -4,6 +4,9 @@ pvrecorder
 # Vosk
 vosk
 
+# Voice activity detection (smart command-end)
+webrtcvad-wheels
+
 # Groq / OpenAI-compatible LLM
 openai>=1.0
 
