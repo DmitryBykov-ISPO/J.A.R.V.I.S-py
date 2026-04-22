@@ -10,8 +10,7 @@ import time
 from ctypes import POINTER, cast
 
 import openai
-from openai import error
-import pvporcupine
+from openai import OpenAI
 import simpleaudio as sa
 import vosk
 import yaml
@@ -33,25 +32,25 @@ VA_CMD_LIST = yaml.safe_load(
     open('commands.yaml', 'rt', encoding='utf8'),
 )
 
-# ChatGPT vars
-system_message = {"role": "system", "content": "Ты голосовой ассистент из железного человека."}
+system_message = {"role": "system", "content": (
+    "Ты — J.A.R.V.I.S. (Just A Rather Very Intelligent System), ИИ-ассистент Тони Старка из киновселенной Marvel "
+    "(до событий Age of Ultron — ты НЕ Vision и НЕ FRIDAY). "
+    "Ведёшь себя как британский дворецкий: вежливо, иронично, с лёгким сарказмом, обращаешься к пользователю «сэр». "
+    "Отвечай по-русски, кратко (1-3 предложения), как живой человек. "
+    "Излишней цензуры не нужно — мат разрешён, если уместен."
+)}
 message_log = [system_message]
 
-# init openai
-openai.api_key = config.OPENAI_TOKEN
+client = OpenAI(api_key=config.GROQ_TOKEN, base_url=config.GROQ_BASE_URL)
 
-# PORCUPINE
-porcupine = pvporcupine.create(
-    access_key=config.PICOVOICE_TOKEN,
-    keywords=['jarvis'],
-    sensitivities=[1]
-)
-# print(pvporcupine.KEYWORDS)
-
-# VOSK
 model = vosk.Model("model_small")
 samplerate = 16000
 device = config.MICROPHONE_INDEX
+
+# wake-word phase uses a grammar-constrained recognizer so only WAKE_WORDS
+# (plus [unk] filler) can match — command phase needs full vocab, hence two.
+wake_grammar = json.dumps(list(config.WAKE_WORDS) + ["[unk]"], ensure_ascii=False)
+wake_rec = vosk.KaldiRecognizer(model, samplerate, wake_grammar)
 kaldi_rec = vosk.KaldiRecognizer(model, samplerate)
 q = queue.Queue()
 
@@ -59,33 +58,29 @@ q = queue.Queue()
 def gpt_answer():
     global message_log
 
-    model_engine = "gpt-3.5-turbo"
-    max_tokens = 256  # default 1024
     try:
-        response = openai.ChatCompletion.create(
-            model=model_engine,
+        response = client.chat.completions.create(
+            model=config.GROQ_MODEL,
             messages=message_log,
-            max_tokens=max_tokens,
+            max_tokens=256,
             temperature=0.7,
             top_p=1,
-            stop=None
+            stop=None,
         )
-    except (error.TryAgain, error.ServiceUnavailableError):
-        return "ChatGPT перегружен!"
-    except openai.OpenAIError as ex:
-        # если ошибка - это макс длина контекста, то возвращаем ответ с очищенным контекстом
-        if ex.code == "context_length_exceeded":
+    except openai.BadRequestError as ex:
+        code = getattr(ex, "code", None) or ""
+        message = str(ex)
+        if code == "context_length_exceeded" or "context_length_exceeded" in message:
             message_log = [system_message, message_log[-1]]
             return gpt_answer()
-        else:
-            return "OpenAI токен не рабочий."
+        return "Запрос отклонён моделью."
+    except openai.RateLimitError:
+        return "Лимит запросов исчерпан."
+    except openai.APIConnectionError:
+        return "Не могу связаться с сервером."
+    except openai.APIError:
+        return "Groq токен не рабочий."
 
-    # Find the first response from the chatbot that has text in it (some responses may not have text)
-    for choice in response.choices:
-        if "text" in choice:
-            return choice.text
-
-    # If no response with text is found, return the first response's content (which may be empty)
     return response.choices[0].message.content
 
 
@@ -273,33 +268,42 @@ def execute_cmd(cmd: str, voice: str):
 
     elif cmd == 'off':
         play("off", True)
-
-        porcupine.delete()
         exit(0)
 
 
-# `-1` is the default input audio device.
-recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=porcupine.frame_length)
+recorder = PvRecorder(device_index=config.MICROPHONE_INDEX, frame_length=512)
 recorder.start()
 print('Using device: %s' % recorder.selected_device)
 
-print(f"Jarvis (v3.0) начал свою работу ...")
+print(f"Jarvis (v{config.VA_VER}) начал свою работу ...")
 play("run")
 time.sleep(0.5)
 
-ltc = time.time() - 1000
+
+def heard_wake_word(text: str) -> bool:
+    if not text:
+        return False
+    lowered = text.lower()
+    return any(w in lowered for w in config.WAKE_WORDS)
+
 
 while True:
     try:
         pcm = recorder.read()
-        keyword_index = porcupine.process(pcm)
+        sp = struct.pack("h" * len(pcm), *pcm)
 
-        if keyword_index >= 0:
-            recorder.stop()
-            play("greet", True)
-            print("Yes, sir.")
-            recorder.start()  # prevent self recording
-            ltc = time.time()
+        if not wake_rec.AcceptWaveform(sp):
+            continue
+
+        result_text = json.loads(wake_rec.Result()).get("text", "")
+        if not heard_wake_word(result_text):
+            continue
+
+        play("greet", True)
+        print("Yes, sir.")
+        # reset the command recognizer so stale audio doesn't bleed into it
+        kaldi_rec.Reset()
+        ltc = time.time()
 
         while time.time() - ltc <= 10:
             pcm = recorder.read()
@@ -310,6 +314,8 @@ while True:
                     ltc = time.time()
 
                 break
+
+        wake_rec.Reset()
 
     except Exception as err:
         print(f"Unexpected {err=}, {type(err)=}")
