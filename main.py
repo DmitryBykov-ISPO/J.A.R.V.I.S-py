@@ -10,6 +10,7 @@ import time
 import webbrowser
 from ctypes import POINTER, cast
 
+import numpy as np
 import openai
 from openai import OpenAI
 import simpleaudio as sa
@@ -63,6 +64,25 @@ vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
 
 intent_classifier = IntentClassifier()
 intent_classifier.prime({c: v['phrases'] for c, v in VA_CMD_LIST.items()})
+
+if config.DENOISE_ENABLED:
+    import noisereduce as nr
+else:
+    nr = None
+
+
+def denoise_pcm(raw: bytes) -> bytes:
+    if not raw or nr is None:
+        return raw
+    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    reduced = nr.reduce_noise(
+        y=samples,
+        sr=samplerate,
+        prop_decrease=config.DENOISE_PROP,
+        stationary=config.DENOISE_STATIONARY,
+    )
+    clipped = np.clip(reduced * 32768.0, -32768, 32767).astype(np.int16)
+    return clipped.tobytes()
 
 
 def gpt_answer():
@@ -294,6 +314,7 @@ while True:
         silence_ms = 0
         vad_buf = b""
         finalize = False
+        cmd_buf = b"" if config.DENOISE_ENABLED else None
 
         while True:
             elapsed_ms = (time.time() - listen_started) * 1000
@@ -302,7 +323,10 @@ while True:
 
             pcm = recorder.read()
             sp = struct.pack("h" * len(pcm), *pcm)
-            kaldi_rec.AcceptWaveform(sp)
+            if cmd_buf is None:
+                kaldi_rec.AcceptWaveform(sp)
+            else:
+                cmd_buf += sp
 
             vad_buf += sp
             while len(vad_buf) >= VAD_FRAME_BYTES:
@@ -321,6 +345,8 @@ while True:
                 break
 
         if finalize or speech_ms > 0:
+            if cmd_buf is not None:
+                kaldi_rec.AcceptWaveform(denoise_pcm(cmd_buf))
             text = json.loads(kaldi_rec.FinalResult()).get("text", "")
             if text:
                 va_respond(text)
