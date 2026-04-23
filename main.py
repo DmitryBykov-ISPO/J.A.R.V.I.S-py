@@ -27,6 +27,7 @@ from rich import print
 
 import config
 import tts
+from intent import IntentClassifier
 
 # some consts
 CDIR = os.getcwd()
@@ -59,6 +60,9 @@ q = queue.Queue()
 VAD_FRAME_MS = 30
 VAD_FRAME_BYTES = int(samplerate * VAD_FRAME_MS / 1000) * 2
 vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
+
+intent_classifier = IntentClassifier()
+intent_classifier.prime({c: v['phrases'] for c, v in VA_CMD_LIST.items()})
 
 
 def gpt_answer():
@@ -140,9 +144,10 @@ def va_respond(voice: str):
 
     print(cmd)
 
+    min_percent = int(round(config.INTENT_SIMILARITY_THRESHOLD * 100))
     if len(cmd['cmd'].strip()) <= 0:
         return False
-    elif cmd['percent'] < 70 or cmd['cmd'] not in VA_CMD_LIST.keys():
+    elif cmd['percent'] < min_percent or cmd['cmd'] not in VA_CMD_LIST.keys():
         # play("not_found")
         # tts.va_speak("Что?")
         if fuzz.ratio(voice.join(voice.split()[:1]).strip(), "скажи") > 75:
@@ -179,15 +184,9 @@ def filter_cmd(raw_voice: str):
 
 
 def recognize_cmd(cmd: str):
-    rc = {'cmd': '', 'percent': 0}
-    for c, v in VA_CMD_LIST.items():
-        for x in v['phrases']:
-            vrt = fuzz.ratio(cmd, x)
-            if vrt > rc['percent']:
-                rc['cmd'] = c
-                rc['percent'] = vrt
-
-    return rc
+    candidates = {c: v['phrases'] for c, v in VA_CMD_LIST.items()}
+    res = intent_classifier.match(cmd, candidates)
+    return {'cmd': res['cmd'], 'percent': int(round(res['score'] * 100))}
 
 
 def _set_mute(state: int):
