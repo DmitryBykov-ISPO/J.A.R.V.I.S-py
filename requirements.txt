@@ -27,6 +27,13 @@ sounddevice
 PyYAML
 python-dotenv
 
+# Semantic intent classifier (MiniLM-L6-v2 ONNX)
+onnxruntime>=1.17
+tokenizers>=0.15
+
+# Noise suppression before STT (optional, off by default)
+noisereduce>=3.0
+
 # GUI command constructor (tools/command_builder)
 ruamel.yaml
 pywebview

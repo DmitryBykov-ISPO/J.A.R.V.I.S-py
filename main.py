@@ -10,6 +10,7 @@ import time
 import webbrowser
 from ctypes import POINTER, cast
 
+import numpy as np
 import openai
 from openai import OpenAI
 import simpleaudio as sa
@@ -27,6 +28,7 @@ from rich import print
 
 import config
 import tts
+from intent import IntentClassifier
 
 # some consts
 CDIR = os.getcwd()
@@ -59,6 +61,28 @@ q = queue.Queue()
 VAD_FRAME_MS = 30
 VAD_FRAME_BYTES = int(samplerate * VAD_FRAME_MS / 1000) * 2
 vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
+
+intent_classifier = IntentClassifier()
+intent_classifier.prime({c: v['phrases'] for c, v in VA_CMD_LIST.items()})
+
+if config.DENOISE_ENABLED:
+    import noisereduce as nr
+else:
+    nr = None
+
+
+def denoise_pcm(raw: bytes) -> bytes:
+    if not raw or nr is None:
+        return raw
+    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    reduced = nr.reduce_noise(
+        y=samples,
+        sr=samplerate,
+        prop_decrease=config.DENOISE_PROP,
+        stationary=config.DENOISE_STATIONARY,
+    )
+    clipped = np.clip(reduced * 32768.0, -32768, 32767).astype(np.int16)
+    return clipped.tobytes()
 
 
 def gpt_answer():
@@ -140,9 +164,10 @@ def va_respond(voice: str):
 
     print(cmd)
 
+    min_percent = int(round(config.INTENT_SIMILARITY_THRESHOLD * 100))
     if len(cmd['cmd'].strip()) <= 0:
         return False
-    elif cmd['percent'] < 70 or cmd['cmd'] not in VA_CMD_LIST.keys():
+    elif cmd['percent'] < min_percent or cmd['cmd'] not in VA_CMD_LIST.keys():
         # play("not_found")
         # tts.va_speak("Что?")
         if fuzz.ratio(voice.join(voice.split()[:1]).strip(), "скажи") > 75:
@@ -179,15 +204,9 @@ def filter_cmd(raw_voice: str):
 
 
 def recognize_cmd(cmd: str):
-    rc = {'cmd': '', 'percent': 0}
-    for c, v in VA_CMD_LIST.items():
-        for x in v['phrases']:
-            vrt = fuzz.ratio(cmd, x)
-            if vrt > rc['percent']:
-                rc['cmd'] = c
-                rc['percent'] = vrt
-
-    return rc
+    candidates = {c: v['phrases'] for c, v in VA_CMD_LIST.items()}
+    res = intent_classifier.match(cmd, candidates)
+    return {'cmd': res['cmd'], 'percent': int(round(res['score'] * 100))}
 
 
 def _set_mute(state: int):
@@ -295,6 +314,7 @@ while True:
         silence_ms = 0
         vad_buf = b""
         finalize = False
+        cmd_buf = b"" if config.DENOISE_ENABLED else None
 
         while True:
             elapsed_ms = (time.time() - listen_started) * 1000
@@ -303,7 +323,10 @@ while True:
 
             pcm = recorder.read()
             sp = struct.pack("h" * len(pcm), *pcm)
-            kaldi_rec.AcceptWaveform(sp)
+            if cmd_buf is None:
+                kaldi_rec.AcceptWaveform(sp)
+            else:
+                cmd_buf += sp
 
             vad_buf += sp
             while len(vad_buf) >= VAD_FRAME_BYTES:
@@ -322,6 +345,8 @@ while True:
                 break
 
         if finalize or speech_ms > 0:
+            if cmd_buf is not None:
+                kaldi_rec.AcceptWaveform(denoise_pcm(cmd_buf))
             text = json.loads(kaldi_rec.FinalResult()).get("text", "")
             if text:
                 va_respond(text)
