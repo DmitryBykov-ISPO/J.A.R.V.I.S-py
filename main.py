@@ -252,6 +252,12 @@ def run_action(action):
         else:
             subprocess.Popen(action['cmd'], shell=True)
     elif t == 'url':
+        browser = action.get('browser')
+        if browser:
+            exe = config.BROWSER_PATHS.get(browser)
+            if exe and os.path.isfile(exe):
+                subprocess.Popen([exe, action['href']])
+                return
         webbrowser.open(action['href'])
     elif t == 'keys':
         import pyautogui
