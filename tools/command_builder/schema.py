@@ -65,13 +65,20 @@ class ShellAction:
         return out
 
 
+KNOWN_BROWSERS = ("yandex", "chrome", "firefox", "edge")
+
+
 @dataclass
 class UrlAction:
     href: str
+    browser: Optional[str] = None
     type: str = "url"
 
     def to_dict(self) -> dict:
-        return {"type": "url", "href": self.href}
+        out: dict = {"type": "url", "href": self.href}
+        if self.browser:
+            out["browser"] = self.browser
+        return out
 
 
 @dataclass
@@ -157,7 +164,10 @@ def action_from_dict(data: Any) -> Action:
         href = data.get("href")
         if not href or not isinstance(href, str):
             raise SchemaError("url action requires non-empty 'href' string")
-        return UrlAction(href=href)
+        browser = data.get("browser")
+        if browser is not None and browser not in KNOWN_BROWSERS:
+            raise SchemaError(f"url.browser must be one of {KNOWN_BROWSERS} or omitted")
+        return UrlAction(href=href, browser=browser)
     if t == "keys":
         sequence = data.get("sequence")
         text = data.get("text")

@@ -191,10 +191,25 @@
                     <label>URL</label>
                     <input type="text" id="url-href" placeholder="https://example.com">
                 </div>
+                <div class="field">
+                    <label>Браузер</label>
+                    <select id="url-browser">
+                        <option value="">по умолчанию (системный)</option>
+                        <option value="yandex">Yandex Browser</option>
+                        <option value="chrome">Google Chrome</option>
+                        <option value="firefox">Mozilla Firefox</option>
+                        <option value="edge">Microsoft Edge</option>
+                    </select>
+                </div>
             `;
             const inp = f.querySelector("#url-href");
-            if (state.action) inp.value = state.action.href || "";
+            const sel = f.querySelector("#url-browser");
+            if (state.action) {
+                inp.value = state.action.href || "";
+                sel.value = state.action.browser || "";
+            }
             inp.addEventListener("input", () => updateAction());
+            sel.addEventListener("change", () => updateAction());
             return;
         }
 
@@ -481,8 +496,23 @@
                 inp.type = "text";
                 inp.value = step.href || "";
                 inp.placeholder = "https://...";
-                inp.addEventListener("input", () => onChange({ type: "url", href: inp.value }));
+                const sel = document.createElement("select");
+                sel.innerHTML = `
+                    <option value="">по умолчанию (системный)</option>
+                    <option value="yandex">Yandex Browser</option>
+                    <option value="chrome">Google Chrome</option>
+                    <option value="firefox">Mozilla Firefox</option>
+                    <option value="edge">Microsoft Edge</option>`;
+                sel.value = step.browser || "";
+                const apply = () => {
+                    const next = { type: "url", href: inp.value };
+                    if (sel.value) next.browser = sel.value;
+                    onChange(next);
+                };
+                inp.addEventListener("input", apply);
+                sel.addEventListener("change", apply);
                 body.appendChild(wrapField("URL", inp));
+                body.appendChild(wrapField("Браузер", sel));
             } else if (t === "keys") {
                 const inp = document.createElement("input");
                 inp.type = "text";
@@ -569,7 +599,10 @@
             if (delay && delay.value) a.delay_ms = parseInt(delay.value, 10);
             state.action = a;
         } else if (t === "url") {
-            state.action = { type: "url", href: (document.getElementById("url-href")||{}).value || "" };
+            const a = { type: "url", href: (document.getElementById("url-href")||{}).value || "" };
+            const b = (document.getElementById("url-browser")||{}).value;
+            if (b) a.browser = b;
+            state.action = a;
         } else if (t === "keys") {
             const mode = (document.getElementById("keys-mode")||{}).value;
             if (mode === "text") {

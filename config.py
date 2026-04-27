@@ -6,7 +6,7 @@ load_dotenv("dev.env")
 
 # Конфигурация
 VA_NAME = 'Jarvis'
-VA_VER = "0.4.0"
+VA_VER = "0.4.1"
 VA_ALIAS = ('джарвис',)
 VA_TBR = ('скажи', 'покажи', 'ответь', 'произнеси', 'расскажи', 'сколько', 'слушай')
 
@@ -19,8 +19,12 @@ WAKE_WORDS = ('jarvis', 'джарвис')
 # -1 это стандартное записывающее устройство
 MICROPHONE_INDEX = -1
 
-# Путь к браузеру Google Chrome
-CHROME_PATH = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe %s'
+BROWSER_PATHS = {
+    'yandex':  'C:/Program Files/Yandex/YandexBrowser/Application/browser.exe',
+    'chrome':  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'firefox': 'C:/Program Files/Mozilla Firefox/firefox.exe',
+    'edge':    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+}
 
 # Токен Groq
 GROQ_TOKEN = os.getenv('GROQ_TOKEN')
