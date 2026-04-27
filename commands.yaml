@@ -2,23 +2,23 @@ open_browser:
   phrases:
     - открой браузер
     - запусти браузер
-    - открой гугл хром
-    - гугл хром
-  action: {type: exe, file: "Run browser.exe"}
+    - открой яндекс
+    - яндекс браузер
+  action: {type: url, href: "about:blank", browser: "yandex"}
 
 open_youtube:
   phrases:
     - открой ютуб
     - ютуб
     - запусти ютуб
-  action: {type: exe, file: "Run youtube.exe"}
+  action: {type: url, href: "https://www.youtube.com", browser: "yandex"}
 
 open_google:
   phrases:
     - открой гугл
     - гугл
     - запусти гугл
-  action: {type: exe, file: "Run google.exe"}
+  action: {type: url, href: "https://www.google.com", browser: "yandex"}
 
 music:
   phrases:
